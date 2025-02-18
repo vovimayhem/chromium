@@ -1,4 +1,4 @@
-name: Continuous Integration & Deploy
+name: CI & CD
 
 on:
   # Scheduling a build every Sunday at midnight:
@@ -51,7 +51,7 @@ jobs:
         env:
           DOCKER_METADATA_PR_HEAD_SHA: "true"
         with:
-          images: ghcr.io/vovimayhem/chromium
+          images: ghcr.io/vovimayhem/chromium-docker
           tags: |
             type=ref,event=pr,suffix=-${{ matrix.docker-platform }}
             type=raw,value=latest-${{ matrix.docker-platform }},enable={{is_default_branch}}
@@ -71,12 +71,12 @@ jobs:
         id: build-and-push-by-digest
         with:
           push: true
-          provenance: false # Do not upload provenance attestations - see https://docs.docker.com/build/attestations/slsa-provenance/
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           platforms: ${{ matrix.docker-platform }}
           builder: ${{ steps.buildx.outputs.name }}
           tags: ${{ steps.image-metadata.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          labels: ${{ steps.image-metadata.outputs.labels }}
 
       - name: Export digest
         run: |
@@ -115,7 +115,7 @@ jobs:
         env:
           DOCKER_METADATA_PR_HEAD_SHA: "true"
         with:
-          images: ghcr.io/vovimayhem/chromium
+          images: ghcr.io/vovimayhem/chromium-docker
           tags: |
             type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
