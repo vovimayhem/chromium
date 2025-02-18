@@ -1,0 +1,124 @@
+name: Continuous Integration & Deploy
+
+on:
+  # Scheduling a build every Sunday at midnight:
+  schedule:
+    - cron: "0 0 * * SUN"
+
+  # Pushes to `main` branch - including a PR being merged:
+  push:
+    branches:
+      - main
+  # Pushes to any branch having a Pull Request to `main` branch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-image:
+    name: Runner Image
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - docker-platform: linux/arm64
+          - docker-platform: linux/amd64
+
+    steps:
+      - name: Prepare
+        run: |
+          platform=${{ matrix.docker-platform }}
+          echo "IMAGE_PLATFORM_NAME=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Set up image metadata
+        id: image-metadata
+        uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: "true"
+        with:
+          images: ghcr.io/vovimayhem/chromium
+          tags: |
+            type=ref,event=pr,suffix=-${{ matrix.docker-platform }}
+            type=raw,value=latest-${{ matrix.docker-platform }},enable={{is_default_branch}}
+            type=ref,event=branch,suffix=-${{ matrix.docker-platform }},enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.docker-platform }}
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        uses: docker/build-push-action@v6
+        id: build-and-push-by-digest
+        with:
+          context: "{{defaultContext}}:docker"
+          push: false # true
+          provenance: false # Do not upload provenance attestations - see https://docs.docker.com/build/attestations/slsa-provenance/
+          platforms: ${{ matrix.docker-platform }}
+          builder: ${{ steps.buildx.outputs.name }}
+          tags: ${{ steps.image-metadata.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build-and-push-by-digest.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.IMAGE_PLATFORM_NAME }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Push manifest
+    runs-on: ubuntu-latest
+    needs:
+      - build-image
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up image metadata
+        id: image-metadata
+        uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: "true"
+        with:
+          images: ghcr.io/vovimayhem/chromium
+          tags: |
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', 'main') }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/vovimayhem/chromium@sha256:%s ' *)          
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ghcr.io/vovimayhem/chromium:${{ steps.image-metadata.outputs.version }}
