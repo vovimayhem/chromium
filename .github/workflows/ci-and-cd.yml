@@ -51,7 +51,7 @@ jobs:
         env:
           DOCKER_METADATA_PR_HEAD_SHA: "true"
         with:
-          images: ghcr.io/vovimayhem/chromium-docker
+          images: ghcr.io/vovimayhem/chromium
           tags: |
             type=ref,event=pr,suffix=-${{ matrix.docker-platform }}
             type=raw,value=latest-${{ matrix.docker-platform }},enable={{is_default_branch}}
@@ -115,7 +115,7 @@ jobs:
         env:
           DOCKER_METADATA_PR_HEAD_SHA: "true"
         with:
-          images: ghcr.io/vovimayhem/chromium-docker
+          images: ghcr.io/vovimayhem/chromium
           tags: |
             type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
