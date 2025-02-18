@@ -1,0 +1,9 @@
+#!/bin/sh
+
+PORT=${PORT:-9222}
+
+echo "Publishing Chromium remote debugging on port ${PORT}..."
+
+exec /usr/bin/multirun \
+ "/usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --remote-debugging-port=922 --remote-debugging-address=0.0.0.0:9222" \
+ "socat tcp-listen:${PORT},reuseaddr,fork tcp:localhost:922"
