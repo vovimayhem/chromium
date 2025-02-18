@@ -1,4 +1,4 @@
-name: Continuous Integration & Deploy
+name: CI & CD
 
 on:
   # Scheduling a build every Sunday at midnight:
@@ -21,20 +21,29 @@ permissions:
 jobs:
   build-image:
     name: Runner Image
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner-type }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - docker-platform: linux/arm64
-          - docker-platform: linux/amd64
+          - runner-type: ubuntu-24.04-arm
+            docker-platform: linux/arm64
+          - runner-type: ubuntu-24.04
+            docker-platform: linux/amd64
 
     steps:
       - name: Prepare
         run: |
           platform=${{ matrix.docker-platform }}
           echo "IMAGE_PLATFORM_NAME=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: vovimayhem
+          password: ${{ secrets.PAT_FOR_CHROMIUM }}
 
       - name: Set up image metadata
         id: image-metadata
@@ -61,14 +70,13 @@ jobs:
         uses: docker/build-push-action@v6
         id: build-and-push-by-digest
         with:
-          context: "{{defaultContext}}:docker"
-          push: false # true
-          provenance: false # Do not upload provenance attestations - see https://docs.docker.com/build/attestations/slsa-provenance/
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           platforms: ${{ matrix.docker-platform }}
           builder: ${{ steps.buildx.outputs.name }}
           tags: ${{ steps.image-metadata.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          labels: ${{ steps.image-metadata.outputs.labels }}
 
       - name: Export digest
         run: |
@@ -96,6 +104,13 @@ jobs:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: vovimayhem
+          password: ${{ secrets.PAT_FOR_CHROMIUM }}
 
       - name: Set up Docker Buildx
         id: buildx
