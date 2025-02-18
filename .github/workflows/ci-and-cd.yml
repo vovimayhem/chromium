@@ -21,20 +21,29 @@ permissions:
 jobs:
   build-image:
     name: Runner Image
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner-type }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - docker-platform: linux/arm64
-          - docker-platform: linux/amd64
+          - runner-type: ubuntu-24.04-arm
+            docker-platform: linux/arm64
+          - runner-type: ubuntu-24.04
+            docker-platform: linux/amd64
 
     steps:
       - name: Prepare
         run: |
           platform=${{ matrix.docker-platform }}
           echo "IMAGE_PLATFORM_NAME=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up image metadata
         id: image-metadata
@@ -61,8 +70,7 @@ jobs:
         uses: docker/build-push-action@v6
         id: build-and-push-by-digest
         with:
-          context: "{{defaultContext}}:docker"
-          push: false # true
+          push: true
           provenance: false # Do not upload provenance attestations - see https://docs.docker.com/build/attestations/slsa-provenance/
           platforms: ${{ matrix.docker-platform }}
           builder: ${{ steps.buildx.outputs.name }}
