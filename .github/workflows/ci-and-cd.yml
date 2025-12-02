@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - fix/ci-workflow-crash-on-docker-login
   # Pushes to any branch having a Pull Request to `main` branch:
   pull_request:
     branches:
@@ -16,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
   id-token: write
 
 jobs:
@@ -42,8 +44,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: vovimayhem
-          password: ${{ secrets.PAT_FOR_CHROMIUM }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up image metadata
         id: image-metadata
@@ -109,8 +111,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: vovimayhem
-          password: ${{ secrets.PAT_FOR_CHROMIUM }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         id: buildx
