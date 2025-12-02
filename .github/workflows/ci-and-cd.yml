@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - fix/ci-workflow-crash-on-docker-login
   # Pushes to any branch having a Pull Request to `main` branch:
   pull_request:
     branches:
